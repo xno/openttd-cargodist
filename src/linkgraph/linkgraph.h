@@ -122,6 +122,9 @@ public:
 
 	void SetSize();
 
+	void AddNewNodeEdges(bool do_resize);
+
+	NodeID AddNode(const Node &orig);
 	NodeID AddNode(Station *st);
 
 	void AddEdge(NodeID from, NodeID to, uint capacity);
@@ -167,6 +170,10 @@ public:
 	{
 		this->num_nodes = 0;
 	}
+
+	void Join(LinkGraphComponent *other);
+
+	LinkGraphComponent *Split(NodeID node1, NodeID node2);
 
 protected:
 	LinkGraphSettings settings; ///< Copy of _settings_game.linkgraph at creation time.

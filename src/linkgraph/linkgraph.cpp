@@ -166,7 +166,7 @@ void LinkGraph::NextComponent()
 
 				if (!ge.link_stats.empty()) {
 					this->LinkGraphComponent::Init(current_component_id + 2);
-					CreateComponent(station);
+					this->CreateComponent(station);
 					return;
 				}
 			}
@@ -203,6 +203,22 @@ void OnTick_LinkGraph()
 	}
 }
 
+void LinkGraphComponent::AddNewNodeEdges(bool do_resize)
+{
+	const Station *st = Station::Get(this->nodes[this->num_nodes].station);
+	std::vector<Edge> &new_edges = this->edges[this->num_nodes];
+
+	/* reset the first edge starting at the new node */
+	new_edges[this->num_nodes].next_edge = INVALID_NODE;
+
+	for (NodeID i = 0; i < this->num_nodes; ++i) {
+		uint distance = DistanceManhattan(st->xy, Station::Get(this->nodes[i].station)->xy);
+		if (do_resize) this->edges[i].push_back(Edge());
+		new_edges[i].Init(distance);
+		this->edges[i][this->num_nodes].Init(distance);
+	}
+}
+
 /**
  * Add a node to the component and create empty edges associated with it. Set
  * the station's last_component to this component. Calculate the distances to all
@@ -226,17 +242,20 @@ NodeID LinkGraphComponent::AddNode(Station *st)
 	this->nodes[this->num_nodes].Init(st->index, good.supply,
 			HasBit(good.acceptance_pickup, GoodsEntry::GES_ACCEPTANCE));
 
-	std::vector<Edge> &new_edges = this->edges[this->num_nodes];
+	this->AddNewNodeEdges(do_resize);
+	return this->num_nodes++;
+}
 
-	/* reset the first edge starting at the new node */
-	new_edges[this->num_nodes].next_edge = INVALID_NODE;
-
-	for (NodeID i = 0; i < this->num_nodes; ++i) {
-		uint distance = DistanceManhattan(st->xy, Station::Get(this->nodes[i].station)->xy);
-		if (do_resize) this->edges[i].push_back(Edge());
-		new_edges[i].Init(distance);
-		this->edges[i][this->num_nodes].Init(distance);
+NodeID LinkGraphComponent::AddNode(const Node &orig)
+{
+	bool do_resize = (this->nodes.size() == this->num_nodes);
+	if (do_resize) {
+		this->nodes.push_back(Node(orig));
+		this->edges.push_back(std::vector<Edge>(this->num_nodes + 1));
+	} else {
+		this->nodes[this->num_nodes] = orig;
 	}
+	this->AddNewNodeEdges(do_resize);
 	return this->num_nodes++;
 }
 
@@ -301,6 +320,45 @@ void LinkGraphComponent::Init(LinkGraphComponentID id)
 	assert(this->num_nodes == 0);
 	this->index = id;
 	this->settings = _settings_game.linkgraph;
+}
+
+/**
+ * Check if a link graph component is still connected and possibly split it
+ * after removing a link.
+ * @param node1 Source of the link being removed.
+ * @param ndoe2 Sink of the link being removed.
+ */
+LinkGraphComponent *LinkGraphComponent::Split(NodeID node1, NodeID node2)
+{
+	/* First check if the component is connected, starting at node2 as there
+	 * might simply be a link in the other direction.
+	 */
+	bool visited[this->GetSize()];
+	memset(&visited, 0, sizeof(visited));
+	std::queue<NodeID> search_queue;
+	search_queue.push(node2);
+	while (!search_queue.empty()) {
+		NodeID node = search_queue.back();
+		visited[node] = true;
+		search_queue.pop();
+		for (NodeID other(this->edges[node][node].next_edge);
+				other != INVALID_NODE;
+				other = this->edges[node][other].next_edge) {
+			if (other == node1) return NULL; // still connected
+			if (!visited[other]) search_queue.push(other);
+		}
+	}
+	// TODO: use DFS to actually transfer edges and nodes
+	// With DFS we always know the previous node and thus
+	// we can easily identify edges to be transferred.
+	LinkGraphComponent *split = new LinkGraphComponent();
+	for (NodeID node = 0; node < this->GetSize(); ++node) {
+		if (visited[node]) {
+			split->AddNode(this->GetNode(node));
+			//this->RemoveNode(node);
+		}
+	}
+	return split;
 }
 
 
