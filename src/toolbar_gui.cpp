@@ -52,6 +52,10 @@
 #include "network/network.h"
 #include "network/network_gui.h"
 #include "network/network_func.h"
+#include "cargo_table_gui.h"
+#include "object_type.h"
+#include "zoning.h"
+#include "watch_gui.h"
 
 
 RailType _last_built_railtype;
@@ -71,11 +75,12 @@ enum CallBackFunction {
 	CBF_NONE,
 	CBF_PLACE_SIGN,
 	CBF_PLACE_LANDINFO,
+	CBF_BUILD_HQ,
 };
 
 /**
  * Drop down list entry for showing a checked/unchecked toggle item.
- */
+ */ /*
 class DropDownListCheckedItem : public DropDownListStringItem {
 	uint checkmark_width;
 public:
@@ -101,7 +106,7 @@ public:
 		}
 		DrawString(left + WD_FRAMERECT_LEFT + (rtl ? 0 : this->checkmark_width), right - WD_FRAMERECT_RIGHT - (rtl ? this->checkmark_width : 0), top, this->String(), sel ? TC_WHITE : TC_BLACK);
 	}
-};
+};*/
 
 /**
  * Drop down list entry for showing a company entry, with companies 'blob'.
@@ -250,6 +255,18 @@ static CallBackFunction SelectSignTool()
 	}
 }
 
+/* hq hotkey */
+static CallBackFunction BuildCompanyHQ(){
+	if (_cursor.sprite == SPR_CURSOR_HQ) {
+		ResetObjectToPlace();
+		return CBF_NONE;
+	} else {
+		SetObjectToPlace(SPR_CURSOR_HQ, PAL_NONE, HT_RECT, WC_MAIN_TOOLBAR, 0);	
+		SetTileSelectSize(2, 2);
+		return CBF_BUILD_HQ;
+	}
+}
+
 /* --- Pausing --- */
 
 static CallBackFunction ToolbarPauseClick(Window *w)
@@ -283,6 +300,7 @@ enum OptionMenuEntries {
 	OME_SETTINGS,
 	OME_SCRIPT_SETTINGS,
 	OME_NEWGRFSETTINGS,
+	OME_ZONING,
 	OME_TRANSPARENCIES,
 	OME_SHOW_TOWNNAMES,
 	OME_SHOW_STATIONNAMES,
@@ -341,6 +359,7 @@ static CallBackFunction MenuClickSettings(int index)
 		case OME_SETTINGS:             ShowGameSettings();                              return CBF_NONE;
 		case OME_SCRIPT_SETTINGS:      ShowAIConfigWindow();                            return CBF_NONE;
 		case OME_NEWGRFSETTINGS:       ShowNewGRFSettings(!_networking && _settings_client.gui.UserIsAllowedToChangeNewGRFs(), true, true, &_grfconfig); return CBF_NONE;
+		case OME_ZONING:               ShowZoningToolbar();                             break;
 		case OME_TRANSPARENCIES:       ShowTransparencyToolbar();                       break;
 
 		case OME_SHOW_TOWNNAMES:       ToggleBit(_display_opt, DO_SHOW_TOWN_NAMES);     break;
@@ -573,6 +592,55 @@ static CallBackFunction ToolbarFinancesClick(Window *w)
 static CallBackFunction MenuClickFinances(int index)
 {
 	ShowCompanyFinances((CompanyID)index);
+	return CBF_NONE;
+}
+
+/* --- CARGOS button menu --- */
+
+static CallBackFunction ToolbarCargosClick(Window *w)
+{
+	PopupMainCompanyToolbMenu(w, WID_TN_CARGOS);
+	return CBF_NONE;
+}
+
+static CallBackFunction MenuClickCargos(int index)
+{
+	ShowCompanyCargos((CompanyID)index);
+	return CBF_NONE;
+}
+
+/* --- GOALS button menu --- */
+
+static CallBackFunction ToolbarGoalsClick(Window *w)
+{
+	if(Company::GetNumItems() == 0){
+		ShowGoalsList(_local_company);
+		return CBF_NONE;
+	}	
+	PopupMainCompanyToolbMenu(w, WID_TN_GOALS);
+	return CBF_NONE;
+}
+
+static CallBackFunction MenuClickGoals(int index)
+{	
+	ShowGoalsList((CompanyID)index);
+	return CBF_NONE;
+}
+
+/* --- WATCH button menu --- */
+
+static CallBackFunction ToolbarWatchClick(Window *w)
+{
+	PopupMainCompanyToolbMenu(w, WID_TN_WATCH);
+	return CBF_NONE;
+}
+
+static CallBackFunction MenuClickWatch(int index)
+{
+	if(Company::IsValidID((CompanyID)index)){
+		ShowWatchWindow((CompanyID)index);
+	}
+	else ShowWatchWindow(INVALID_COMPANY);
 	return CBF_NONE;
 }
 
@@ -1131,7 +1199,13 @@ void SetStartingYear(Year year)
 static CallBackFunction MenuClickHelp(int index)
 {
 	switch (index) {
-		case  0: return PlaceLandBlockInfo();
+		case 0: return PlaceLandBlockInfo();
+		case 1:
+			extern bool novahost();
+			if (_networking && novahost()){
+				ShowCommandsToolbar();
+			}
+			break;
 		case  2: IConsoleSwitch();                 break;
 		case  3: ShowAIDebugWindow();              break;
 		case  4: MenuClickSmallScreenshot();       break;
@@ -1646,6 +1720,11 @@ enum MainToolbarHotkeys {
 	MTHK_EXTRA_VIEWPORT,
 	MTHK_CLIENT_LIST,
 	MTHK_SIGN_LIST,
+	MTHK_BUILD_HQ,
+	MTHK_GOAL_GUI,
+	MTHK_COMMANDS_GUI,
+	MTHK_CARGOTABLE,
+	MTHK_TREES,
 };
 
 /** Main toolbar. */
@@ -1671,7 +1750,7 @@ struct MainToolbarWindow : Window {
 		 * Since enabled state is the default, just disable when needed */
 		this->SetWidgetsDisabledState(_local_company == COMPANY_SPECTATOR, WID_TN_RAILS, WID_TN_ROADS, WID_TN_WATER, WID_TN_AIR, WID_TN_LANDSCAPE, WIDGET_LIST_END);
 		/* disable company list drop downs, if there are no companies */
-		this->SetWidgetsDisabledState(Company::GetNumItems() == 0, WID_TN_STATIONS, WID_TN_FINANCES, WID_TN_TRAINS, WID_TN_ROADVEHS, WID_TN_SHIPS, WID_TN_AIRCRAFTS, WIDGET_LIST_END);
+		this->SetWidgetsDisabledState(Company::GetNumItems() == 0, WID_TN_STATIONS, WID_TN_FINANCES, WID_TN_CARGOS, WID_TN_WATCH, WID_TN_TRAINS, WID_TN_ROADVEHS, WID_TN_SHIPS, WID_TN_AIRCRAFTS, WIDGET_LIST_END);
 
 		this->SetWidgetDisabledState(WID_TN_GOAL, Goal::GetNumItems() == 0);
 		this->SetWidgetDisabledState(WID_TN_STORY, StoryPage::GetNumItems() == 0);
@@ -1734,11 +1813,22 @@ struct MainToolbarWindow : Window {
 			case MTHK_EXTRA_VIEWPORT: ShowExtraViewPortWindowForTileUnderCursor(); break;
 #ifdef ENABLE_NETWORK
 			case MTHK_CLIENT_LIST: if (_networking) ShowClientList(); break;
+			case MTHK_COMMANDS_GUI: extern bool _novahost; if (_networking && _novahost) { ShowCommandsToolbar(); } break;
 #endif
+			case MTHK_BUILD_HQ: if(_current_company != COMPANY_SPECTATOR){ this->last_started_action = CBF_BUILD_HQ; BuildCompanyHQ(); } break;
+			case MTHK_GOAL_GUI: ShowGoalsList(_local_company); break;
+			case MTHK_CARGOTABLE: if(_current_company != COMPANY_SPECTATOR){ ShowCompanyCargos(_current_company); } break;
+			case MTHK_TREES: BuildTreesWindow(); break;
 			case MTHK_SIGN_LIST: ShowSignList(); break;
 			default: return ES_NOT_HANDLED;
 		}
 		return ES_HANDLED;
+	}
+
+	virtual void BuildTreesWindow(){
+		ShowBuildTreesToolbar();
+		Window *w = FindWindowById(WC_BUILD_TREES, 0);
+		return w->OnClick(Point(), 12, 1); //WID_BT_TYPE_RANDOM=12
 	}
 
 	virtual void OnPlaceObject(Point pt, TileIndex tile)
@@ -1750,6 +1840,13 @@ struct MainToolbarWindow : Window {
 
 			case CBF_PLACE_LANDINFO:
 				ShowLandInfo(tile);
+				break;
+
+			case CBF_BUILD_HQ:
+				if(DoCommandP(tile, OBJECT_HQ, 0, CMD_BUILD_OBJECT | CMD_MSG(STR_ERROR_CAN_T_BUILD_COMPANY_HEADQUARTERS))){
+					ResetObjectToPlace();
+					this->RaiseButtons();
+				}
 				break;
 
 			default: NOT_REACHED();

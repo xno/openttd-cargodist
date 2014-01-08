@@ -28,7 +28,7 @@
 #include "vehiclelist.h"
 #include "order_backup.h"
 #include "zoom_func.h"
-
+#include "hotkeys.h"
 #include "widgets/depot_widget.h"
 
 #include "table/strings.h"
@@ -288,9 +288,16 @@ struct DepotWindow : Window {
 						this->sel, EIT_IN_DEPOT, free_wagon ? 0 : this->hscroll->GetPosition(), this->vehicle_over);
 
 				/* Length of consist in tiles with 1 fractional digit (rounded up) */
-				SetDParam(0, CeilDiv(u->gcache.cached_total_length * 10, TILE_SIZE));
-				SetDParam(1, 1);
-				DrawString(rtl ? left + WD_FRAMERECT_LEFT : right - this->count_width, rtl ? left + this->count_width : right - WD_FRAMERECT_RIGHT, y + (this->resize.step_height - FONT_HEIGHT_SMALL) / 2, STR_TINY_BLACK_DECIMAL, TC_FROMSTRING, SA_RIGHT); // Draw the counter
+				if (_settings_client.gui.old_depot_train_length_calc) {
+					SetDParam(0, CeilDiv(u->gcache.cached_total_length, 8));
+					SetDParam(1, 1);
+					DrawString(rtl ? left + WD_FRAMERECT_LEFT : right - this->count_width, rtl ? left + this->count_width : right - WD_FRAMERECT_RIGHT, y + (this->resize.step_height - FONT_HEIGHT_SMALL) / 2, STR_TINY_BLACK_COMA, TC_FROMSTRING, SA_RIGHT); // Draw the counter
+				}
+				else {
+					SetDParam(0, CeilDiv(u->gcache.cached_total_length * 10, TILE_SIZE));
+					SetDParam(1, 1);
+					DrawString(rtl ? left + WD_FRAMERECT_LEFT : right - this->count_width, rtl ? left + this->count_width : right - WD_FRAMERECT_RIGHT, y + (this->resize.step_height - FONT_HEIGHT_SMALL) / 2, STR_TINY_BLACK_DECIMAL, TC_FROMSTRING, SA_RIGHT); // Draw the counter
+				}
 				break;
 			}
 
@@ -987,7 +994,31 @@ struct DepotWindow : Window {
 
 		return ES_NOT_HANDLED;
 	}
+
+	// Handle the hotkey
+	void DepotGoAll_Hotkey(int i){
+		this->OnClick(Point(), WID_D_START_ALL, 1);
+	}
+	
+	void BuildVehicle_Hotkey(int i){
+		this->OnClick(Point(), WID_D_BUILD, 1);
+	}
+
+	virtual EventState OnKeyPress(WChar key, uint16 keycode)
+	{
+		if (this->owner != _local_company) return ES_NOT_HANDLED;
+		return CheckHotkeyMatch<DepotWindow>(depot_hotkeys, keycode, this) != -1 ? ES_HANDLED : ES_NOT_HANDLED;
+	}
+
+	static Hotkey<DepotWindow> depot_hotkeys[];
 };
+
+Hotkey<DepotWindow> DepotWindow::depot_hotkeys[] = {
+	Hotkey<DepotWindow>(WKC_CTRL | 'G', "depot_go_all", 0, &DepotWindow::DepotGoAll_Hotkey),
+	Hotkey<DepotWindow>('B', "depot_build_vehicle", 0, &DepotWindow::BuildVehicle_Hotkey),	
+	HOTKEY_LIST_END(DepotWindow)
+};
+Hotkey<DepotWindow> *_depot_hotkeys = DepotWindow::depot_hotkeys;
 
 static void DepotSellAllConfirmationCallback(Window *win, bool confirmed)
 {

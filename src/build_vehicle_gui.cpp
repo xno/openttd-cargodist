@@ -34,7 +34,7 @@
 #include "autoreplace_func.h"
 
 #include "widgets/build_vehicle_widget.h"
-
+#include "hotkeys.h"
 #include "table/strings.h"
 
 /**

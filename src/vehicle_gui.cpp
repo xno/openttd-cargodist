@@ -38,6 +38,7 @@
 #include "station_base.h"
 #include "tilehighlight_func.h"
 #include "zoom_func.h"
+#include "hotkeys.h"
 
 
 Sorting _sorting;
@@ -2754,6 +2755,26 @@ public:
 	{
 		::ShowNewGRFInspectWindow(GetGrfSpecFeature(Vehicle::Get(this->window_number)->type), this->window_number);
 	}
+	
+	// Handle the hotkey
+	void VehicleOrders_Hotkey(int i)
+	{
+		const Vehicle *v = Vehicle::Get(this->window_number);
+		ShowOrdersWindow(v);
+	}
+
+	void VehicleGo_Hotkey(int i){
+		const Vehicle *v = Vehicle::Get(this->window_number);
+		StartStopVehicle(v, false);
+	}
+
+	virtual EventState OnKeyPress(WChar key, uint16 keycode)
+	{
+		if (this->owner != _local_company) return ES_NOT_HANDLED;
+		return CheckHotkeyMatch<VehicleViewWindow>(vehiclegui_hotkeys, keycode, this) != -1 ? ES_HANDLED : ES_NOT_HANDLED;
+	}
+
+	static Hotkey<VehicleViewWindow> vehiclegui_hotkeys[];
 };
 
 
@@ -2762,6 +2783,13 @@ void ShowVehicleViewWindow(const Vehicle *v)
 {
 	AllocateWindowDescFront<VehicleViewWindow>((v->type == VEH_TRAIN) ? &_train_view_desc : &_vehicle_view_desc, v->index);
 }
+
+Hotkey<VehicleViewWindow> VehicleViewWindow::vehiclegui_hotkeys[] = {
+	Hotkey<VehicleViewWindow>('G', "vehicle_orders", 0, &VehicleViewWindow::VehicleOrders_Hotkey),
+	Hotkey<VehicleViewWindow>('X', "vehicle_go", 0, &VehicleViewWindow::VehicleGo_Hotkey),
+	HOTKEY_LIST_END(VehicleViewWindow)
+};
+Hotkey<VehicleViewWindow> *_vehiclegui_hotkeys = VehicleViewWindow::vehiclegui_hotkeys;
 
 /**
  * Dispatch a "vehicle selected" event if any window waits for it.

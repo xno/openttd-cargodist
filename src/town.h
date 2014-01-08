@@ -15,6 +15,9 @@
 #include "viewport_type.h"
 #include "town_map.h"
 #include "subsidy_type.h"
+#include "openttd.h"
+#include "table/strings.h"
+#include "company_func.h"
 #include "newgrf_storage.h"
 #include "cargotype.h"
 #include "tilematrix_type.hpp"
@@ -75,10 +78,19 @@ struct Town : TownPool::PoolItem<&_town_pool> {
 	CompanyByte exclusivity;       ///< which company has exclusivity
 	uint8 exclusive_counter;       ///< months till the exclusivity expires
 	int16 ratings[MAX_COMPANIES];  ///< ratings of each company for this town
+	StringID town_label;           ///< Label dependent on _local_company rating.
 
 	TransportedCargoStat<uint32> supplied[NUM_CARGO]; ///< Cargo statistics about supplied cargo.
 	TransportedCargoStat<uint16> received[NUM_TE];    ///< Cargo statistics about received cargotypes.
 	uint32 goal[NUM_TE];                              ///< Amount of cargo required for the town to grow.
+
+	bool growing;  //CB	
+	/* amounts in storage */
+	int storage[NUM_CARGO];  //CB stored cargo
+	uint act_cargo[NUM_CARGO];  //CB delivered last month
+	uint new_act_cargo[NUM_CARGO];  //CB  delivered current month
+	bool delivered_enough[NUM_CARGO];  //CB
+	bool growing_by_chance;        ///< town growing due to 1/12 chance?
 
 	char *text; ///< General text with additional information.
 
@@ -112,6 +124,30 @@ struct Town : TownPool::PoolItem<&_town_pool> {
 	~Town();
 
 	void InitializeLayout(TownLayout layout);
+	
+	void UpdateLabel();
+
+ 	/* Returns the correct town label, based on rating. */
+	//FORCEINLINE StringID Label() const{
+	StringID Label() const{
+		if (!(_game_mode == GM_EDITOR) && (_local_company < MAX_COMPANIES)) {
+			return STR_VIEWPORT_TOWN_POP_VERY_POOR_RATING + this->town_label;
+		} 
+		else {
+			return _settings_client.gui.population_in_label ? STR_VIEWPORT_TOWN_POP : STR_VIEWPORT_TOWN;
+		}
+	}
+
+	/* Returns the correct town small label, based on rating. */
+	//FORCEINLINE StringID SmallLabel() const{
+	StringID SmallLabel() const{
+		if (!(_game_mode == GM_EDITOR) && (_local_company < MAX_COMPANIES)) {
+			return STR_VIEWPORT_TOWN_TINY_VERY_POOR_RATING + this->town_label;
+		} 
+		else {
+			return STR_VIEWPORT_TOWN_TINY_WHITE;
+		}
+	}
 
 	/**
 	 * Calculate the max town noise.
@@ -194,6 +230,14 @@ uint GetMaskOfTownActions(int *nump, CompanyID cid, const Town *t);
 bool GenerateTowns(TownLayout layout);
 const CargoSpec *FindFirstCargoWithTownEffect(TownEffect effect);
 
+bool CB_Enabled();
+void CB_SetCB(bool cb);
+void CB_SetStorage(uint storage);
+void CB_SetRequirements(CargoID cargo, uint req, uint from, uint decay);
+uint CB_GetReq(CargoID cargo);
+uint CB_GetFrom(CargoID cargo);
+uint CB_GetDecay(CargoID cargo);
+int CB_GetTownReq(uint population, uint req, uint from, bool from_non_important);
 
 /** Town actions of a company. */
 enum TownActions {

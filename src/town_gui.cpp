@@ -34,8 +34,16 @@
 #include "widgets/dropdown_func.h"
 
 #include "widgets/town_widget.h"
-
+#include "hotkeys.h"
 #include "table/strings.h"
+#include <list>
+#include "console_func.h"
+
+struct CargoX {
+	int id;
+	int from;
+};
+void ShowCBTownWindow(uint town);
 
 typedef GUIList<const Town*> GUITownList;
 
@@ -307,7 +315,7 @@ public:
 		this->CreateNestedTree();
 
 		this->town = Town::Get(window_number);
-		if (this->town->larger_town) this->GetWidget<NWidgetCore>(WID_TV_CAPTION)->widget_data = STR_TOWN_VIEW_CITY_CAPTION;
+		if (this->town->larger_town) this->GetWidget<NWidgetCore>(WID_TV_CAPTION)->widget_data = STR_TOWN_VIEW_CITY_CAPTION_EXTRA;
 
 		this->FinishInitNested(window_number);
 
@@ -317,11 +325,25 @@ public:
 
 		/* disable renaming town in network games if you are not the server */
 		this->SetWidgetDisabledState(WID_TV_CHANGE_NAME, _networking && !_network_server);
+		extern bool _novahost;
+		this->SetWidgetDisabledState(WID_TV_CB, !_networking || !_novahost || this->town->larger_town);
 	}
 
 	virtual void SetStringParameters(int widget) const
 	{
-		if (widget == WID_TV_CAPTION) SetDParam(0, this->town->index);
+		if (widget == WID_TV_CAPTION){ 
+			SetDParam(0, this->town->index);
+			SetDParam(1, this->town->ratings[_current_company]);
+		}
+		if (widget == WID_TV_CB){
+			extern bool _novahost;
+			if(!_networking || !_novahost || this->town->larger_town) SetDParam(0, STR_EMPTY);
+			else SetDParam(0, STR_BUTTON_CB_YES);
+		}		
+	}
+
+	virtual void OnHundrethTick() {
+		this->SetDirty();
 	}
 
 	virtual void DrawWidget(const Rect &r, int widget) const
@@ -341,6 +363,12 @@ public:
 		SetDParam(0, this->town->supplied[CT_MAIL].old_act);
 		SetDParam(1, this->town->supplied[CT_MAIL].old_max);
 		DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y += FONT_HEIGHT_NORMAL, STR_TOWN_VIEW_MAIL_LAST_MONTH_MAX);
+		
+		SetDParam(0, (((this->town->growth_rate & (~TOWN_GROW_RATE_CUSTOM)) + 1) * TOWN_GROWTH_TICKS + DAY_TICKS / 2) / DAY_TICKS);
+		SetDParam(1, (this->town->growth_rate & (~TOWN_GROW_RATE_CUSTOM)) < 1000 ? (((this->town->grow_counter + 1) * TOWN_GROWTH_TICKS + DAY_TICKS / 2) / DAY_TICKS) : -1);
+		SetDParam(2, this->town->time_until_rebuild);
+		SetDParam(3, HasBit(this->town->flags, TOWN_IS_FUNDED) ? (this->town->growing_by_chance ? 2 : 1) : 0);
+		DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y += FONT_HEIGHT_NORMAL, STR_TOWN_VIEW_GROWTH);
 
 		bool first = true;
 		for (int i = TE_BEGIN; i < TE_END; i++) {
@@ -441,6 +469,10 @@ public:
 				break;
 			}
 
+			case WID_TV_CB:
+				if(_networking) ShowCBTownWindow(this->window_number);
+				break;
+
 			case WID_TV_DELETE: // delete town - only available on Scenario editor
 				DoCommandP(0, this->window_number, 0, CMD_DELETE_TOWN | CMD_MSG(STR_ERROR_TOWN_CAN_T_DELETE));
 				break;
@@ -453,6 +485,9 @@ public:
 			case WID_TV_INFO:
 				size->height = GetDesiredInfoHeight(size->width);
 				break;
+			case WID_TV_CB:
+				if(!_networking || !CB_Enabled()) size->width = 0;
+				break;
 		}
 	}
 
@@ -462,7 +497,7 @@ public:
 	 */
 	uint GetDesiredInfoHeight(int width) const
 	{
-		uint aimed_height = 3 * FONT_HEIGHT_NORMAL + WD_FRAMERECT_TOP + WD_FRAMERECT_BOTTOM;
+		uint aimed_height = 4 * FONT_HEIGHT_NORMAL + WD_FRAMERECT_TOP + WD_FRAMERECT_BOTTOM;
 
 		bool first = true;
 		for (int i = TE_BEGIN; i < TE_END; i++) {
@@ -531,7 +566,7 @@ public:
 static const NWidgetPart _nested_town_game_view_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_BROWN),
-		NWidget(WWT_CAPTION, COLOUR_BROWN, WID_TV_CAPTION), SetDataTip(STR_TOWN_VIEW_TOWN_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
+		NWidget(WWT_CAPTION, COLOUR_BROWN, WID_TV_CAPTION), SetDataTip(STR_TOWN_VIEW_TOWN_CAPTION_EXTRA, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
 		NWidget(WWT_SHADEBOX, COLOUR_BROWN),
 		NWidget(WWT_DEFSIZEBOX, COLOUR_BROWN),
 		NWidget(WWT_STICKYBOX, COLOUR_BROWN),
@@ -543,10 +578,11 @@ static const NWidgetPart _nested_town_game_view_widgets[] = {
 	EndContainer(),
 	NWidget(WWT_PANEL, COLOUR_BROWN, WID_TV_INFO), SetMinimalSize(260, 32), SetResize(1, 0), SetFill(1, 0), EndContainer(),
 	NWidget(NWID_HORIZONTAL),
-		NWidget(NWID_HORIZONTAL, NC_EQUALSIZE),
-			NWidget(WWT_PUSHTXTBTN, COLOUR_BROWN, WID_TV_CENTER_VIEW), SetMinimalSize(80, 12), SetFill(1, 1), SetResize(1, 0), SetDataTip(STR_BUTTON_LOCATION, STR_TOWN_VIEW_CENTER_TOOLTIP),
+		NWidget(NWID_HORIZONTAL), //, NC_EQUALSIZE
+			NWidget(WWT_PUSHTXTBTN, COLOUR_BROWN, WID_TV_CENTER_VIEW), SetMinimalSize(60, 12), SetFill(1, 1), SetResize(1, 0), SetDataTip(STR_BUTTON_LOCATION, STR_TOWN_VIEW_CENTER_TOOLTIP),
 			NWidget(WWT_PUSHTXTBTN, COLOUR_BROWN, WID_TV_SHOW_AUTHORITY), SetMinimalSize(80, 12), SetFill(1, 1), SetResize(1, 0), SetDataTip(STR_TOWN_VIEW_LOCAL_AUTHORITY_BUTTON, STR_TOWN_VIEW_LOCAL_AUTHORITY_TOOLTIP),
-			NWidget(WWT_PUSHTXTBTN, COLOUR_BROWN, WID_TV_CHANGE_NAME), SetMinimalSize(80, 12), SetFill(1, 1), SetResize(1, 0), SetDataTip(STR_BUTTON_RENAME, STR_TOWN_VIEW_RENAME_TOOLTIP),
+			NWidget(WWT_PUSHTXTBTN, COLOUR_BROWN, WID_TV_CHANGE_NAME), SetMinimalSize(60, 12), SetFill(1, 1), SetResize(1, 0), SetDataTip(STR_BUTTON_RENAME, STR_TOWN_VIEW_RENAME_TOOLTIP),
+			NWidget(WWT_PUSHTXTBTN, COLOUR_BROWN, WID_TV_CB), SetMinimalSize(20, 12), SetFill(1, 1), SetResize(1, 0), SetDataTip(STR_BUTTON_CB, 0),
 		EndContainer(),
 		NWidget(WWT_RESIZEBOX, COLOUR_BROWN),
 	EndContainer(),
@@ -603,7 +639,7 @@ void ShowTownViewWindow(TownID town)
 static const NWidgetPart _nested_town_directory_widgets[] = {
 	NWidget(NWID_HORIZONTAL),
 		NWidget(WWT_CLOSEBOX, COLOUR_BROWN),
-		NWidget(WWT_CAPTION, COLOUR_BROWN), SetDataTip(STR_TOWN_DIRECTORY_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
+		NWidget(WWT_CAPTION, COLOUR_BROWN, TDW_CAPTION_TEXT), SetDataTip(STR_TOWN_DIRECTORY_CAPTION_EXTRA, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
 		NWidget(WWT_SHADEBOX, COLOUR_BROWN),
 		NWidget(WWT_DEFSIZEBOX, COLOUR_BROWN),
 		NWidget(WWT_STICKYBOX, COLOUR_BROWN),
@@ -780,7 +816,8 @@ public:
 
 					SetDParam(0, t->index);
 					SetDParam(1, t->cache.population);
-					DrawString(text_left, text_right, y + (this->resize.step_height - FONT_HEIGHT_NORMAL) / 2, STR_TOWN_DIRECTORY_TOWN);
+					/* CITIES DIFFERENT COLOUR*/
+					DrawString(text_left, text_right, y + (this->resize.step_height - FONT_HEIGHT_NORMAL) / 2, STR_TOWN_DIRECTORY_TOWN_COLOUR, (t->larger_town ? TC_YELLOW : TC_ORANGE), SA_LEFT);
 
 					y += this->resize.step_height;
 					if (++n == this->vscroll->GetCapacity()) break; // max number of towns in 1 window
@@ -1194,3 +1231,253 @@ void ShowFoundTownWindow()
 	if (_game_mode != GM_EDITOR && !Company::IsValidID(_local_company)) return;
 	AllocateWindowDescFront<FoundTownWindow>(&_found_town_desc, 0);
 }
+//CB
+bool CB_sortCargoesByFrom(CargoX first, CargoX second){
+	return (first.from < second.from) ? true : false;
+}
+
+struct CBTownWindow : Window {
+private: 
+	Town *town;
+	std::list<CargoX> cargoes;
+
+public:
+	CBTownWindow(const WindowDesc *desc, WindowNumber window_number) : Window()
+	{
+		for (uint i = 0; i < NUM_CARGO ; i++) {
+			//const CargoSpec *cargos = CargoSpec::Get(i);
+			CargoX c;
+			c.id = i;
+			c.from = CB_GetFrom(i);
+			this->cargoes.push_back(c);
+		}
+		cargoes.sort(CB_sortCargoesByFrom);
+		this->town = Town::Get(window_number);
+		this->InitNested(desc, window_number);
+	}
+
+	virtual void OnClick(Point pt, int widget, int click_count)
+	{
+		switch (widget) {
+			case WID_CB_LOCATION:
+				if (_ctrl_pressed) {
+					ShowExtraViewPortWindow(this->town->xy);
+				} 
+				else {
+					ScrollMainWindowToTile(this->town->xy);
+				}
+				break;
+			case WID_CB_ADVERT:
+				DoCommandP(this->town->xy, this->window_number, 2, CMD_DO_TOWN_ACTION | CMD_MSG(STR_ERROR_CAN_T_DO_THIS));
+				break;
+			case WID_CB_FUND:
+				DoCommandP(this->town->xy, this->window_number, 5, CMD_DO_TOWN_ACTION | CMD_MSG(STR_ERROR_CAN_T_DO_THIS));
+				break;
+		}
+	}
+
+	virtual void SetStringParameters(int widget) const
+	{
+		if (widget == WID_TV_CAPTION){ 
+			SetDParam(0, this->town->index);
+			SetDParam(1, this->town->cache.population);
+		}
+	}
+
+	void UpdateWidgetSize(int widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize)
+	{
+		static const uint EXP_TOPPADDING = 5;
+		static const uint EXP_LINESPACE  = 2;      ///< Amount of vertical space for a horizontal (sub-)total line.
+
+		//uint extra_width = 0;	
+		switch(widget){
+			case WID_CB_DETAILS:
+				size->height = (FONT_HEIGHT_NORMAL + EXP_LINESPACE) * 2;
+				break;
+			case WID_CB_CARGO_NAME:
+			case WID_CB_CARGO_AMOUNT:
+			case WID_CB_CARGO_REQ:
+			case WID_CB_CARGO_STORE:
+			case WID_CB_CARGO_FROM:
+			case WID_CB_CARGO_PREVIOUS:
+				uint desired_height = 1;
+				for(CargoID cargo = 0; cargo < NUM_CARGO; cargo++){
+					if(CB_GetReq(cargo) > 0) desired_height++;
+				}
+				size->height = desired_height * (FONT_HEIGHT_NORMAL + EXP_LINESPACE) + EXP_TOPPADDING - EXP_LINESPACE;
+				break;
+		}
+	}
+
+	void DrawWidget(const Rect &r, int widget) const
+	{
+		uint y = r.top + WD_FRAMERECT_TOP;
+		switch(widget){
+			case WID_CB_DETAILS:{
+				if (this->town->larger_town) break;
+				if(this->town->growing) DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y, STR_TOWN_CB_GROWING );
+				else DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y, STR_TOWN_CB_NOT_GROWING );
+				
+				if (this->town->fund_buildings_months > 0) {
+					SetDParam(0, this->town->fund_buildings_months);
+					DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y += FONT_HEIGHT_NORMAL, STR_TOWN_CB_FUNDING);
+				}
+				break;
+			}
+			/* Citybuilder things*/
+			case WID_CB_CARGO_NAME:
+			case WID_CB_CARGO_AMOUNT:
+			case WID_CB_CARGO_REQ:
+			case WID_CB_CARGO_STORE:
+			case WID_CB_CARGO_FROM:
+			case WID_CB_CARGO_PREVIOUS: {
+				if (!CB_Enabled() || this->town->larger_town) break;
+
+				uint delivered;
+				uint requirements;
+				uint from;
+				StringID string_to_draw;
+
+				//for cycle
+				std::list<CargoX> cargoes2 = this->cargoes;
+				std::list<CargoX>::iterator it2;
+				for (it2 = cargoes2.begin(); it2 != cargoes2.end(); ++it2) {
+					CargoX cargox;
+					cargox = *it2;
+					if (it2 == cargoes2.begin()) { //header
+						DrawString(r.left + WD_FRAMERECT_LEFT + 14, r.right - WD_FRAMERECT_LEFT, y, 
+							(STR_TOWN_GROWTH_HEADER_CARGO + widget - WID_CB_CARGO_NAME), TC_FROMSTRING, 
+							(widget == WID_CB_CARGO_NAME) ? SA_LEFT : SA_RIGHT);
+
+						y += (FONT_HEIGHT_NORMAL + 2);
+					}
+
+					const CargoSpec *cargos = CargoSpec::Get(cargox.id); 
+					//cargo needed?
+					if (!cargos->IsValid() || CB_GetReq(cargos->Index()) == 0) continue;
+					
+					from = CB_GetFrom(cargos->Index());
+
+					switch(widget) {
+						case WID_CB_CARGO_NAME: {
+							int rect_x = (r.left + WD_FRAMERECT_LEFT);
+							GfxFillRect(rect_x, y + 1, rect_x + 8, y + 6, 0);
+							GfxFillRect(rect_x + 1, y + 2, rect_x + 7, y + 5, cargos->legend_colour);
+
+							SetDParam(0, cargos->name);
+							DrawString(r.left + WD_FRAMERECT_LEFT + 14, r.right - WD_FRAMERECT_LEFT, y, STR_TOWN_CB_CARGO_NAME);
+							break;
+						}
+						case WID_CB_CARGO_AMOUNT: {
+							delivered = this->town->new_act_cargo[cargos->Index()];
+							requirements = CB_GetTownReq(this->town->cache.population, CB_GetReq(cargos->Index()), from, true);
+							SetDParam(0, delivered);
+							
+							//when required
+							if (this->town->cache.population >= from) {								
+								if((delivered + (uint)this->town->storage[cargos->Index()]) >= requirements) string_to_draw = STR_TOWN_CB_CARGO_AMOUNT_GOOD;								
+								else string_to_draw = STR_TOWN_CB_CARGO_AMOUNT_BAD;
+							}
+							//when not required -> all faded
+							else string_to_draw = STR_TOWN_CB_CARGO_AMOUNT_NOT;
+
+							DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y, string_to_draw, TC_FROMSTRING, SA_RIGHT);
+							break;
+						}
+						case WID_CB_CARGO_REQ: {
+							requirements = CB_GetTownReq(this->town->cache.population, CB_GetReq(cargos->Index()), from, true);
+							SetDParam(0, requirements);
+							 //when required
+							string_to_draw = (this->town->cache.population >= from) ? STR_TOWN_CB_CARGO_REQ_YES : STR_TOWN_CB_CARGO_REQ_NOT;
+							DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y, string_to_draw, TC_FROMSTRING, SA_RIGHT);
+							break;
+						}
+						case WID_CB_CARGO_PREVIOUS: {
+							requirements = CB_GetTownReq(this->town->cache.population, CB_GetReq(cargos->Index()), from, true);							
+							SetDParam(0, this->town->act_cargo[cargos->Index()]);
+							if (this->town->cache.population >= from){
+								if (this->town->delivered_enough[cargos->Index()]) {
+									string_to_draw = (this->town->act_cargo[cargos->Index()] >= requirements) ? STR_TOWN_CB_CARGO_PREVIOUS_YES : STR_TOWN_CB_CARGO_PREVIOUS_EDGE;
+								}
+								else string_to_draw = STR_TOWN_CB_CARGO_PREVIOUS_BAD;
+							}
+							else string_to_draw = STR_TOWN_CB_CARGO_PREVIOUS_NOT;
+
+							DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y, string_to_draw, TC_FROMSTRING, SA_RIGHT);
+							break;
+						}
+						case WID_CB_CARGO_STORE: {
+							SetDParam(0, this->town->storage[cargos->Index()]);
+							if (CB_GetDecay(cargos->Index()) == 100) string_to_draw = STR_TOWN_CB_CARGO_STORE_DECAY;  //when 100% decay
+							else if (this->town->cache.population >= from) string_to_draw = STR_TOWN_CB_CARGO_STORE_YES;  //when required
+							else string_to_draw = STR_TOWN_CB_CARGO_STORE_NOT;
+
+							DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y, string_to_draw, TC_FROMSTRING, SA_RIGHT);
+							break;
+						}
+						case WID_CB_CARGO_FROM: {
+							SetDParam(0, from);
+							string_to_draw = (this->town->cache.population >= from) ? STR_TOWN_CB_CARGO_FROM_YES : STR_TOWN_CB_CARGO_FROM_NOT; //when required							
+
+							DrawString(r.left + WD_FRAMERECT_LEFT, r.right - WD_FRAMERECT_LEFT, y, string_to_draw, TC_FROMSTRING, SA_RIGHT);							break;
+						}
+						//last case
+					}
+					//switch
+					y += (FONT_HEIGHT_NORMAL + 2);
+					//cargo needed?
+				}
+				//for cycle
+			}
+			break;
+		}
+		/* Citybuilder things enabled*/
+	}
+
+};
+
+static const NWidgetPart _nested_cb_town_widgets[] = {
+	NWidget(NWID_HORIZONTAL),
+		NWidget(WWT_CLOSEBOX, COLOUR_BROWN),
+		NWidget(WWT_CAPTION, COLOUR_BROWN, WID_TV_CAPTION), SetDataTip(STR_TOWN_VIEW_CB_CAPTION, STR_TOOLTIP_WINDOW_TITLE_DRAG_THIS),
+		NWidget(WWT_STICKYBOX, COLOUR_BROWN),
+	EndContainer(),
+	NWidget(NWID_HORIZONTAL),
+	NWidget(WWT_PANEL, COLOUR_BROWN), SetResize(1, 0),
+		NWidget(NWID_VERTICAL), 
+			NWidget(NWID_SPACER), SetMinimalSize(0, 5),
+			NWidget(NWID_HORIZONTAL), 
+				NWidget(WWT_EMPTY, COLOUR_BROWN, WID_CB_DETAILS),SetMinimalSize(150, 0), SetResize(0, 0), SetFill(0, 0),
+				NWidget(NWID_HORIZONTAL, NC_EQUALSIZE),
+					NWidget(WWT_PUSHTXTBTN, COLOUR_BROWN, WID_CB_LOCATION),SetMinimalSize(40, 15),SetFill(1, 0), SetDataTip(STR_BUTTON_LOCATION, 0),
+					NWidget(NWID_SPACER), SetMinimalSize(2, 0),
+					NWidget(WWT_PUSHTXTBTN, COLOUR_BROWN, WID_CB_ADVERT),SetMinimalSize(40, 15),SetFill(1, 0), SetDataTip(STR_CB_LARGE_ADVERTISING_CAMPAIGN, 0),
+					NWidget(NWID_SPACER), SetMinimalSize(2, 0),
+					NWidget(WWT_PUSHTXTBTN, COLOUR_BROWN, WID_CB_FUND),SetMinimalSize(40, 15),SetFill(1, 0), SetDataTip(STR_CB_NEW_BUILDINGS, 0),
+					NWidget(NWID_SPACER), SetMinimalSize(4, 0),
+				EndContainer(),
+			EndContainer(),	
+			NWidget(NWID_SPACER), SetMinimalSize(0, 5),
+			NWidget(NWID_HORIZONTAL), 
+				NWidget(WWT_EMPTY, COLOUR_BROWN, WID_CB_CARGO_NAME),SetMinimalSize(100, 0), SetResize(0, 0), SetFill(0, 0),
+				NWidget(WWT_EMPTY, COLOUR_BROWN, WID_CB_CARGO_AMOUNT),SetMinimalSize(70, 0), SetResize(1, 0), SetFill(0, 0),
+				NWidget(WWT_EMPTY, COLOUR_BROWN, WID_CB_CARGO_REQ),SetMinimalSize(70, 0), SetResize(1, 0), SetFill(0, 0),
+				NWidget(WWT_EMPTY, COLOUR_BROWN, WID_CB_CARGO_PREVIOUS),SetMinimalSize(80, 0),  SetResize(1, 0), SetFill(0, 0),
+				NWidget(WWT_EMPTY, COLOUR_BROWN, WID_CB_CARGO_STORE),SetMinimalSize(70, 0), SetResize(1, 0), SetFill(0, 0),
+				NWidget(WWT_EMPTY, COLOUR_BROWN, WID_CB_CARGO_FROM),SetMinimalSize(60, 0), SetResize(1, 0), SetFill(0, 0),
+			EndContainer(),	
+		EndContainer(),
+	EndContainer(),
+};
+
+static const WindowDesc _cb_town_desc(
+	WDP_AUTO, 0, 0,
+	WC_CB_TOWN, WC_NONE,
+	WDF_CONSTRUCTION,
+	_nested_cb_town_widgets, lengthof(_nested_cb_town_widgets)
+);
+
+void ShowCBTownWindow(uint town) {
+	AllocateWindowDescFront<CBTownWindow>(&_cb_town_desc, town);
+}
+

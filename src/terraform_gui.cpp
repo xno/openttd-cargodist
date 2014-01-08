@@ -193,7 +193,7 @@ struct TerraformToolbarWindow : Window {
 				break;
 
 			case WID_TT_BUY_LAND: // Buy land button
-				HandlePlacePushButton(this, WID_TT_BUY_LAND, SPR_CURSOR_BUY_LAND, HT_RECT);
+				HandlePlacePushButton(this, WID_TT_BUY_LAND, SPR_CURSOR_BUY_LAND, HT_RECT | HT_DIAGONAL);
 				this->last_user_action = widget;
 				break;
 

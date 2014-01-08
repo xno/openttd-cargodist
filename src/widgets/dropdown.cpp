@@ -40,7 +40,12 @@ void DropDownListStringItem::Draw(int left, int right, int top, int bottom, bool
 {
 	DrawString(left + WD_FRAMERECT_LEFT, right - WD_FRAMERECT_RIGHT, top, this->String(), sel ? TC_WHITE : TC_BLACK);
 }
-
+/*
+const char * DropDownListCharStringItem::String() const
+{
+	return this->string;
+}
+*/
 /**
  * Natural sorting comparator function for DropDownList::sort().
  * @param first Left side of comparison.
@@ -389,7 +394,12 @@ void ShowDropDownListAt(Window *w, const DropDownList *list, int selected, int b
 	Dimension dw_size = {width, height};
 	new DropdownWindow(w, list, selected, button, instant_close, dw_pos, dw_size, wi_colour, scroll);
 }
-
+/*
+const char * DropDownListCharStringItem::String() const
+{
+	return this->string;
+}
+*/
 /**
  * Show a drop down list.
  * @param w        Parent window for the list.

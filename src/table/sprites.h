@@ -1336,6 +1336,17 @@ static const SpriteID SPR_SELECT_SUB_TROPICAL_PUSHED = 4887;
 static const SpriteID SPR_SELECT_TOYLAND             = 4888;
 static const SpriteID SPR_SELECT_TOYLAND_PUSHED      = 4889;
 
+/* zoning stuff; dunno where else to put it */
+static const SpriteID SPR_INNER_HIGHLIGHT_BASE      = 50000;
+static const SpriteID SPR_IMG_COMPANY_CARGO         = SPR_INNER_HIGHLIGHT_BASE + 19;
+static const SpriteID SPR_IMG_COMPANY_GOAL          = SPR_INNER_HIGHLIGHT_BASE + 20;
+static const SpriteID SPR_PALETTE_ZONING_RED        = SPR_INNER_HIGHLIGHT_BASE + 21;
+static const SpriteID SPR_PALETTE_ZONING_GREEN      = SPR_INNER_HIGHLIGHT_BASE + 22;
+static const SpriteID SPR_PALETTE_ZONING_BLACK      = SPR_INNER_HIGHLIGHT_BASE + 23;
+static const SpriteID SPR_PALETTE_ZONING_LIGHT_BLUE = SPR_INNER_HIGHLIGHT_BASE + 24;
+static const SpriteID SPR_PALETTE_ZONING_ORANGE     = SPR_INNER_HIGHLIGHT_BASE + 25;
+static const SpriteID SPR_PALETTE_ZONING_WHITE      = SPR_INNER_HIGHLIGHT_BASE + 26;
+
 /** Cursor sprite numbers */
 
 /* Terraform
@@ -1561,5 +1572,7 @@ static const PaletteID PALETTE_CRASH               = 804;  ///< Recolour sprite 
 /* Two recolourings only used by the church */
 static const PaletteID PALETTE_CHURCH_RED          = 1438; ///< Recolour sprite for reddish churches
 static const PaletteID PALETTE_CHURCH_CREAM        = 1439; ///< Recolour sprite for white churches
+
+static const SpriteID INVALID_SPRITE_ID = UINT_MAX;
 
 #endif /* SPRITES_H */
